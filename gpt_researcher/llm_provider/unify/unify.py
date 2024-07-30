@@ -1,23 +1,10 @@
 import os
 
 from colorama import Fore, Style
-from langchain_openai import AzureChatOpenAI
+from langchain_openai import ChatOpenAI
 
-'''
-Please note:
-Needs additional env vars such as: 
-    AZURE_OPENAI_ENDPOINT  e.g. https://xxxx.openai.azure.com/",
-    AZURE_OPENAI_API_KEY e.g "xxxxxxxxxxxxxxxxxxxxx",
-    OPENAI_API_VERSION, e.g. "2024-03-01-preview" but needs to updated over time as API verison updates,
-    AZURE_EMBEDDING_MODEL e.g. "ada2" The Azure OpenAI embedding model deployment name.
 
-config.py settings for Azure OpenAI should look like:
-    self.embedding_provider = os.getenv('EMBEDDING_PROVIDER', 'azureopenai')
-    self.llm_provider = os.getenv('LLM_PROVIDER', "azureopenai")
-    self.fast_llm_model = os.getenv('FAST_LLM_MODEL', "gpt-4o-mini") #Deployment name of your GPT-4o model as per azure OpenAI studio deployment section
-    self.smart_llm_model = os.getenv('SMART_LLM_MODEL', "gpt-4o")  #Deployment name of your GPT-4o (GPT-4o) model as per azure OpenAI studio deployment section
-'''
-class AzureOpenAIProvider:
+class UnifyProvider:
 
     def __init__(
         self,
@@ -28,30 +15,53 @@ class AzureOpenAIProvider:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.api_key = self.get_api_key()
+        self.api_key, self.openai_api_key = self.get_api_key()
+        self.base_url, self.openai_base_url = self.get_base_url()
         self.llm = self.get_llm_model()
 
     def get_api_key(self):
         """
-        Gets the OpenAI API key
+        Gets the Unify and OpenAI API key
         Returns:
 
         """
         try:
-            api_key = os.environ["AZURE_OPENAI_API_KEY"]
-        except:
+            api_key = os.environ["UNIFY_KEY"]
+        except KeyError:
             raise Exception(
-                "Azure OpenAI API key not found. Please set the AZURE_OPENAI_API_KEY environment variable.")
-        return api_key
+                "Unify API key not found. Please set the UNIFY_KEY environment variable.")
+        try:
+            openai_api_key = os.environ["UNIFY_KEY"]
+        except KeyError:
+            raise Exception(
+                "OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
+        
+        return api_key, openai_api_key
+
+    def get_base_url(self):
+        """
+        Gets the Unify and OpenAI Base URL
+        Returns:
+
+        """
+        return "https://api.unify.ai/v0/", "https://api.openai.com/v1"
 
     def get_llm_model(self):
         # Initializing the chat model
-        llm = AzureChatOpenAI(
+        api_key = self.api_key
+        base_url = self.base_url
+        if "embedding" in self.model:
+            api_key = self.openai_api_key
+            base_url = self.openai_base_url
+        llm = ChatOpenAI(
             model=self.model,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-            api_key=self.api_key
+            api_key=api_key,
+            base_url=base_url
         )
+        if base_url:
+            llm.openai_api_base = base_url
 
         return llm
 
@@ -59,7 +69,6 @@ class AzureOpenAIProvider:
         if not stream:
             # Getting output from the model chain using ainvoke for asynchronous invoking
             output = await self.llm.ainvoke(messages)
-
             return output.content
 
         else:
